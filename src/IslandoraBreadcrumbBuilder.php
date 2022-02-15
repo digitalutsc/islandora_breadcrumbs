@@ -31,6 +31,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    */
   protected $nodeStorage;
 
+  // check whether is type islandora object
+  var $isIslandora;
+
   /**
    * Constructs a breadcrumb builder.
    *
@@ -54,7 +57,11 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
-      return (!empty($node) && $node->hasField($this->config->get('referenceField')));
+      if($node->hasField($this->config->get('referenceField'))){
+        global $isIslandora; 
+        $isIslandora = true;
+      }
+      return (!empty($node));
     }
   }
 
@@ -62,37 +69,45 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * {@inheritdoc}
    */
   public function build(RouteMatchInterface $route_match) {
-
-    $nid = $route_match->getRawParameters()->get('node');
-    $node = $this->nodeStorage->load($nid);
     $breadcrumb = new Breadcrumb();
     $breadcrumb->addLink(Link::createFromRoute($this->t('Home'), '<front>'));
 
-    $chain = [];
-    $this->walkMembership($node, $chain);
+    global $isIslandora; 
+    if($isIslandora){
+      $nid = $route_match->getRawParameters()->get('node');
+      $node = $this->nodeStorage->load($nid);
 
-    if (!$this->config->get('includeSelf')) {
-      array_pop($chain);
+      $chain = [];
+      $this->walkMembership($node, $chain);
+
+      if (!$this->config->get('includeSelf')) {
+        array_pop($chain);
+      }
+      $breadcrumb->addCacheableDependency($node);
+
+      // Add membership chain to the breadcrumb.
+      foreach ($chain as $chainlink) {
+        $breadcrumb->addCacheableDependency($chainlink);
+        $breadcrumb->addLink($chainlink->toLink());
+      }
+
+    }else{
+      $parameters = $route_match->getParameters()->all();
+        $node = $parameters['node'];
+        //Getting latest node revision
+        $vid = \Drupal::entityTypeManager()->getStorage('node')->getLatestRevisionId($node->id());
+        $node_new = \Drupal::entityTypeManager()->getStorage('node')->loadRevision($vid);
+        $node_array = $node_new->toArray();
+        
     }
-    $breadcrumb->addCacheableDependency($node);
-
-    // Add membership chain to the breadcrumb.
-    foreach ($chain as $chainlink) {
-      $breadcrumb->addCacheableDependency($chainlink);
-      $breadcrumb->addLink($chainlink->toLink());
-    }
-
+    
     // add current page title to the breadcrumb.
-    /*
     if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute()) {
-
       $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
       if (!empty($title)) {
         $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
       }
     }
-    */
-
     $breadcrumb->addCacheContexts(['route']);
     return $breadcrumb;
   }
