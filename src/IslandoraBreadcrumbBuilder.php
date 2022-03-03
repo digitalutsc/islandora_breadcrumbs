@@ -102,7 +102,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     }
     
     // add current page title to the breadcrumb.
-    if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute()) {
+    if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
       $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
       if (!empty($title)) {
         $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
