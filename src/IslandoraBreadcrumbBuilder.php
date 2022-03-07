@@ -10,6 +10,7 @@ use Drupal\Core\Breadcrumb\BreadcrumbBuilderInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
+use Drupal\Component\Utility\Unicode;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -54,6 +55,13 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     // Using getRawParameters for consistency (always gives a
     // node ID string) because getParameters sometimes returns
     // a node ID string and sometimes returns a node object.
+    $parameters = $attributes->getParameters()->all();
+    if (isset($parameters['taxonomy_term'])) {
+        return TRUE;
+    }
+    if (isset($parameters['view_id'])) {
+        return TRUE;
+   }
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
@@ -69,43 +77,64 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * {@inheritdoc}
    */
   public function build(RouteMatchInterface $route_match) {
+    //initialize breadcrumb and create link to Home
     $breadcrumb = new Breadcrumb();
     $breadcrumb->addLink(Link::createFromRoute($this->t('Home'), '<front>'));
 
-    global $isIslandora; 
-    if($isIslandora){
-      $nid = $route_match->getRawParameters()->get('node');
-      $node = $this->nodeStorage->load($nid);
+    $parameters = $route_match->getParameters()->all();
+    if (isset($parameters['taxonomy_term'])) {
+      // breadcrumb for taxonomy term
+      $term = $parameters['taxonomy_term'];
+      $breadcrumb->addLink(Link::createFromRoute($term->getName(), '<none>'));
 
-      $chain = [];
-      $this->walkMembership($node, $chain);
-
-      if (!$this->config->get('includeSelf')) {
-        array_pop($chain);
-      }
-      $breadcrumb->addCacheableDependency($node);
-
-      // Add membership chain to the breadcrumb.
-      foreach ($chain as $chainlink) {
-        $breadcrumb->addCacheableDependency($chainlink);
-        $breadcrumb->addLink($chainlink->toLink());
-      }
-
+      /*
+      $bundle_machine_name =  $term->bundle();
+      $breadcrumb->addLink(Link::createFromRoute($bundle_machine_name, '<none>'));
+      */
+      
+    }else if(isset($parameters['view_id'])){
+      $path = \Drupal::service('path.current')->getPath();
+      $path_elements = explode('/', $path);
+      $title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
+      //$title = "test";
+      $breadcrumb->addLink(Link::createFromRoute($title, '<none>'));
     }else{
-      $parameters = $route_match->getParameters()->all();
+      global $isIslandora; 
+      if($isIslandora){
+        // breadcrumb for islandora object
+        $nid = $route_match->getRawParameters()->get('node');
+        $node = $this->nodeStorage->load($nid);
+
+        $chain = [];
+        $this->walkMembership($node, $chain);
+
+        if (!$this->config->get('includeSelf')) {
+          array_pop($chain);
+        }
+        $breadcrumb->addCacheableDependency($node);
+
+        // Add membership chain to the breadcrumb.
+        foreach ($chain as $chainlink) {
+          $breadcrumb->addCacheableDependency($chainlink);
+          $breadcrumb->addLink($chainlink->toLink());
+        }
+
+      }else{
+        // default breadcrumb
+        $parameters = $route_match->getParameters()->all();
         $node = $parameters['node'];
-        //Getting latest node revision
         $vid = \Drupal::entityTypeManager()->getStorage('node')->getLatestRevisionId($node->id());
         $node_new = \Drupal::entityTypeManager()->getStorage('node')->loadRevision($vid);
         $node_array = $node_new->toArray();
-        
-    }
-    
-    // add current page title to the breadcrumb.
-    if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
-      $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
-      if (!empty($title)) {
-        $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
+          
+      }
+      
+      // add current page title to the breadcrumb.
+      if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
+        $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
+        if (!empty($title)) {
+          $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
+        }
       }
     }
     $breadcrumb->addCacheContexts(['route']);
