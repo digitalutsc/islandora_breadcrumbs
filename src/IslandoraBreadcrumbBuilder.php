@@ -11,6 +11,8 @@ use Drupal\Core\Link;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Component\Utility\Unicode;
+use Drupal\taxonomy\Entity\Term;
+use Drupal\node\Entity\Node;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -57,16 +59,16 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     // a node ID string and sometimes returns a node object.
     $parameters = $attributes->getParameters()->all();
     if (isset($parameters['taxonomy_term'])) {
-        return TRUE;
+      return TRUE;
     }
     if (isset($parameters['view_id'])) {
-        return TRUE;
-   }
+      return TRUE;
+    }
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
       if($node->hasField($this->config->get('referenceField'))){
-        global $isIslandora; 
+        global $isIslandora;
         $isIslandora = true;
       }
       return (!empty($node));
@@ -91,15 +93,30 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $bundle_machine_name =  $term->bundle();
       $breadcrumb->addLink(Link::createFromRoute($bundle_machine_name, '<none>'));
       */
-      
+
     }else if(isset($parameters['view_id'])){
       $path = \Drupal::service('path.current')->getPath();
+      $url_object = \Drupal::service('path.validator')->getUrlIfValid($path);
+      $route_name = $url_object->getRouteName();
+
       $path_elements = explode('/', $path);
-      $title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
-      //$title = "test";
-      $breadcrumb->addLink(Link::createFromRoute($title, '<none>'));
+      $nid = "";
+      foreach($path_elements as $pe) {
+
+        if (intval($pe)) {
+          // if it's node id
+          $node = \Drupal\node\Entity\Node::load($pe);
+          if($node->hasField($this->config->get('referenceField'))){
+            $nid = $pe;
+            // if islandora object
+            $title = $node->getTitle();
+          }
+        }
+      }
+      //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
+      $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
     }else{
-      global $isIslandora; 
+      global $isIslandora;
       if($isIslandora){
         // breadcrumb for islandora object
         $nid = $route_match->getRawParameters()->get('node');
@@ -115,8 +132,28 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
         // Add membership chain to the breadcrumb.
         foreach ($chain as $chainlink) {
-          $breadcrumb->addCacheableDependency($chainlink);
-          $breadcrumb->addLink($chainlink->toLink());
+          $link = $chainlink->toLink()->toString()->getGeneratedLink();
+
+          // extract node from the link
+          preg_match_all('/<a[^>]+href=([\'"])(?<href>.+?)\1[^>]*>/i', $link, $result);
+          if (!empty($result)) {
+            # Found a link.
+            $node_url = $result['href'][0];
+            if(preg_match('/node\/(\d+)/', $node_url, $matches)) {
+              $nid = $matches[1];
+              $node = Node::load($nid);
+              if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Collection" ){
+                  $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
+                  $route_name = $url_object->getRouteName();
+                  // if the parent is collection, replace the node link with collection view link
+                  $breadcrumb->addLink(Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]));
+              }
+            }
+          }
+          else {
+            $breadcrumb->addCacheableDependency($chainlink);
+            $breadcrumb->addLink($chainlink->toLink());
+          }
         }
 
       }else{
@@ -126,9 +163,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         $vid = \Drupal::entityTypeManager()->getStorage('node')->getLatestRevisionId($node->id());
         $node_new = \Drupal::entityTypeManager()->getStorage('node')->loadRevision($vid);
         $node_array = $node_new->toArray();
-          
+
       }
-      
+
       // add current page title to the breadcrumb.
       if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
         $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
