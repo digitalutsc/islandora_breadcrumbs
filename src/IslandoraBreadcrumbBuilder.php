@@ -114,7 +114,11 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         }
       }
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
-      $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
+      if ($parameters['view_id']  === "advanced_search") {
+        $breadcrumb->addLink(Link::createFromRoute("Search Results", '<none>'));
+      }else {
+        $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
+      }
     }else{
       global $isIslandora;
       if($isIslandora){
