@@ -98,7 +98,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $path = \Drupal::service('path.current')->getPath();
       $url_object = \Drupal::service('path.validator')->getUrlIfValid($path);
       $route_name = $url_object->getRouteName();
-
+      $title = '';
       $path_elements = explode('/', $path);
       $nid = "";
       foreach($path_elements as $pe) {
@@ -129,6 +129,10 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         $chain = [];
         $this->walkMembership($node, $chain);
 
+        if (count($chain) < 2) {
+          $this->walkPartOf($node, $chain);
+        }
+
         if (!$this->config->get('includeSelf')) {
           array_pop($chain);
         }
@@ -143,14 +147,29 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
           if (!empty($result)) {
             # Found a link.
             $node_url = $result['href'][0];
-            if(preg_match('/node\/(\d+)/', $node_url, $matches)) {
+
+            $node_matched = preg_match('/node\/(\d+)/', $node_url, $matches);
+            if ($node_matched === 0) {
+              // add to handle node id with alias (ark url)
+              $path = \Drupal::service('path_alias.manager')->getPathByAlias(urldecode($node_url));
+              $node_matched = preg_match('/node\/(\d+)/', $path, $matches);
+            }
+
+            if($node_matched) {
               $nid = $matches[1];
               $node = Node::load($nid);
+
               if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Collection" ){
                   $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
                   $route_name = $url_object->getRouteName();
                   // if the parent is collection, replace the node link with collection view link
                   $breadcrumb->addLink(Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]));
+              }
+              else if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Paged Content" ){
+                $breadcrumb->addLink(Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]));
+              }
+              else {
+
               }
             }
           }
@@ -182,6 +201,21 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     return $breadcrumb;
   }
 
+  public static function getNodeIdByAlias(string $alias) {
+    $data = NULL;
+    try {
+      $query = \Drupal::entityQuery('path_alias');
+      $query->condition('alias', '/' . $alias, '=');
+      $aliasIds = $query->execute();
+      foreach ($aliasIds as $id) {
+        $path = \Drupal::entityTypeManager()->getStorage('path_alias')->load($id)->getPath();
+        $data = (int) str_replace("/node/", "", $path);
+      }
+    } catch (\Exception $e) {
+      $data = $e->getMessage();
+    }
+    return $data;
+  }
   /**
    * Follows chain of field_member_of links.
    *
@@ -207,6 +241,27 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       !$entity->get($this->config->get('referenceField'))->isEmpty() &&
       $entity->get($this->config->get('referenceField'))->entity instanceof EntityInterface) {
       $this->walkMembership($entity->get($this->config->get('referenceField'))->entity, $crumbs);
+    }
+  }
+
+  /**
+   * Follows chain of field_member_of links.
+   *
+   * We pass crumbs by reference to enable checking for looped chains.
+   */
+  protected function walkPartOf(EntityInterface $entity, &$crumbs) {
+
+    // Find the next in the chain, if there are any.
+    if ($entity->hasField("field_part_of") &&
+      count($entity->get("field_part_of")->referencedEntities()) >0 &&
+      $entity->get("field_part_of")->referencedEntities()[0] instanceof EntityInterface) {
+
+      $first_page = $entity->get("field_part_of")->referencedEntities()[0];
+      // Add this item onto the pile.
+      $this->walkMembership($first_page, $crumbs);
+
+      // Add this item onto the pile.
+      array_unshift($crumbs, $entity);
     }
   }
 
