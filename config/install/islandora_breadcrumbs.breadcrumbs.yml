@@ -1,6 +1,7 @@
-maxDepth: -1
 includeSelf: FALSE
-referenceField: field_member_of
+referenceFields:
+  - field_member_of
+  - field_part_of
 dependencies:
   module:
     - islandora

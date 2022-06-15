@@ -1,12 +1,12 @@
 islandora_breadcrumbs.breadcrumbs:
   type: config_object
   mapping:
-    maxDepth:
-      type: integer
-      label: 'Max Depth'
     includeSelf:
       type: boolean
       label: 'Include Self'
-    referenceField:
-      type: string
-      label: 'Reference Field'
+    referenceFields:
+      type: sequence
+      label: 'Reference Fields'
+      sequence:
+        type: string
+        label: 'Reference Field'
