@@ -13,6 +13,7 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Component\Utility\Unicode;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\node\Entity\Node;
+use Drupal\islandora_breadcrumbs\IslandoraBreadcrumb;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -80,7 +81,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    */
   public function build(RouteMatchInterface $route_match) {
     //initialize breadcrumb and create link to Home
-    $breadcrumb = new Breadcrumb();
+    $breadcrumb = new IslandoraBreadcrumb();
     $breadcrumb->addLink(Link::createFromRoute($this->t('Home'), '<front>'));
 
     $parameters = $route_match->getParameters()->all();
