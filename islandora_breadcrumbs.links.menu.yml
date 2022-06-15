@@ -1,0 +1,6 @@
+islandora_breadcrumbs.settings:
+  title: 'Islandora Breadcrumbs Settings'
+  parent: system.admin_config_ui
+  route_name: system.islandora_breadcrumbs_settings
+  weight: 100
+  description: 'Configure Islandora Breadcrumbs settings.'
