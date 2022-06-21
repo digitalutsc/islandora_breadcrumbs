@@ -1,0 +1,7 @@
+system.islandora_breadcrumbs_settings:
+  path: '/admin/config/islandora/breadcrumbs'
+  defaults:
+    _form: 'Drupal\islandora_breadcrumbs\Form\IslandoraBreadcrumbsSettingsForm'
+    _title: 'Islandora Breadcrumbs Settings'
+  requirements:
+    _permission: 'administer site configuration'

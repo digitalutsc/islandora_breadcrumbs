@@ -13,6 +13,7 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Component\Utility\Unicode;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\node\Entity\Node;
+use Drupal\islandora_breadcrumbs\IslandoraBreadcrumb;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -67,7 +68,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
-      if($node->hasField($this->config->get('referenceField'))){
+      if($this->nodeHasReferenceFields($node)){
         global $isIslandora;
         $isIslandora = true;
       }
@@ -80,7 +81,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    */
   public function build(RouteMatchInterface $route_match) {
     //initialize breadcrumb and create link to Home
-    $breadcrumb = new Breadcrumb();
+    $breadcrumb = new IslandoraBreadcrumb();
     $breadcrumb->addLink(Link::createFromRoute($this->t('Home'), '<front>'));
 
     $parameters = $route_match->getParameters()->all();
@@ -101,12 +102,13 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $title = '';
       $path_elements = explode('/', $path);
       $nid = "";
+      $node = NULL;
       foreach($path_elements as $pe) {
 
         if (intval($pe)) {
           // if it's node id
           $node = \Drupal\node\Entity\Node::load($pe);
-          if($node->hasField($this->config->get('referenceField'))){
+          if($this->nodeHasReferenceFields($node)){
             $nid = $pe;
             // if islandora object
             $title = $node->getTitle();
@@ -117,6 +119,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       if ($parameters['view_id']  === "advanced_search") {
         $breadcrumb->addLink(Link::createFromRoute("Search Results", '<none>'));
       }else {
+        $this->setReferenceBreadcrumbs($breadcrumb, $node);
         $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
       }
     }else{
@@ -125,72 +128,11 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         // breadcrumb for islandora object
         $nid = $route_match->getRawParameters()->get('node');
         $node = $this->nodeStorage->load($nid);
-
-        $chain = [];
-        $this->walkMembership($node, $chain);
-
-        if (count($chain) < 2) {
-          $this->walkPartOf($node, $chain);
-        }
-
-        if (!$this->config->get('includeSelf')) {
-          array_pop($chain);
-        }
-        $breadcrumb->addCacheableDependency($node);
-
-        // Add membership chain to the breadcrumb.
-        foreach ($chain as $chainlink) {
-          $link = $chainlink->toLink()->toString()->getGeneratedLink();
-
-          // extract node from the link
-          preg_match_all('/<a[^>]+href=([\'"])(?<href>.+?)\1[^>]*>/i', $link, $result);
-          if (!empty($result)) {
-            # Found a link.
-            $node_url = $result['href'][0];
-
-            $node_matched = preg_match('/node\/(\d+)/', $node_url, $matches);
-            if ($node_matched === 0) {
-              // add to handle node id with alias (ark url)
-              $path = \Drupal::service('path_alias.manager')->getPathByAlias(urldecode($node_url));
-              $node_matched = preg_match('/node\/(\d+)/', $path, $matches);
-            }
-
-            if($node_matched) {
-              $nid = $matches[1];
-              $node = Node::load($nid);
-
-              if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Collection" ){
-                  $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
-                  $route_name = $url_object->getRouteName();
-                  // if the parent is collection, replace the node link with collection view link
-                  $breadcrumb->addLink(Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]));
-              }
-              else if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Paged Content" ){
-                $breadcrumb->addLink(Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]));
-              }
-              else {
-
-              }
-            }
-          }
-          else {
-            $breadcrumb->addCacheableDependency($chainlink);
-            $breadcrumb->addLink($chainlink->toLink());
-          }
-        }
-
-      }else{
-        // default breadcrumb
-        $parameters = $route_match->getParameters()->all();
-        $node = $parameters['node'];
-        $vid = \Drupal::entityTypeManager()->getStorage('node')->getLatestRevisionId($node->id());
-        $node_new = \Drupal::entityTypeManager()->getStorage('node')->loadRevision($vid);
-        $node_array = $node_new->toArray();
-
+        $this->setReferenceBreadcrumbs($breadcrumb, $node);
       }
 
       // add current page title to the breadcrumb.
-      if ($breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
+      if ($this->config->get('includeSelf') && $breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
         $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
         if (!empty($title)) {
           $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
@@ -201,68 +143,137 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     return $breadcrumb;
   }
 
-  public static function getNodeIdByAlias(string $alias) {
-    $data = NULL;
-    try {
-      $query = \Drupal::entityQuery('path_alias');
-      $query->condition('alias', '/' . $alias, '=');
-      $aliasIds = $query->execute();
-      foreach ($aliasIds as $id) {
-        $path = \Drupal::entityTypeManager()->getStorage('path_alias')->load($id)->getPath();
-        $data = (int) str_replace("/node/", "", $path);
-      }
-    } catch (\Exception $e) {
-      $data = $e->getMessage();
-    }
-    return $data;
-  }
   /**
-   * Follows chain of field_member_of links.
+   * Sets trail of breadcrumbs between home and current page.
    *
-   * We pass crumbs by reference to enable checking for looped chains.
+   * @param \Drupal\islandora_breadcrumbs\IslandoraBreadcrumb $breadcrumb
+   *   Breadcrumb to set.
+   * @param \Drupal\node\Entity\Node $node
+   *   Node to get breadcrumb of.
    */
-  protected function walkMembership(EntityInterface $entity, &$crumbs) {
-    // Avoid infinate loops, return if we've seen this before.
-    foreach ($crumbs as $crumb) {
-      if ($crumb->uuid == $entity->uuid) {
-        return;
-      }
-    }
-
-    // Add this item onto the pile.
-    array_unshift($crumbs, $entity);
-
-    if ($this->config->get('maxDepth') > 0 && count($crumbs) >= $this->config->get('maxDepth')) {
+  protected function setReferenceBreadcrumbs(IslandoraBreadcrumb &$breadcrumb, ?Node $node) {
+    if ($node == NULL) {
       return;
     }
+    $breadcrumb->addCacheableDependency($node);
 
-    // Find the next in the chain, if there are any.
-    if ($entity->hasField($this->config->get('referenceField')) &&
-      !$entity->get($this->config->get('referenceField'))->isEmpty() &&
-      $entity->get($this->config->get('referenceField'))->entity instanceof EntityInterface) {
-      $this->walkMembership($entity->get($this->config->get('referenceField'))->entity, $crumbs);
+    // get entities from referenced fields
+    $referenced_entities = $this->getReferencedEntities($node);
+
+    // check referenced fields for members
+    foreach ($referenced_entities as $referenced_entity) {
+      $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
+      $node = $this->extractNode($referenced_entity);
+      $refs = $this->getReferencedEntities($node);
+      if (count($refs) > 0) {
+        $breadcrumb->addLink(Link::createFromRoute($this->t('...'), '<none>'));
+        break;
+      }
+    }
+
+    // add members to breadcrumb
+    if (count($referenced_entities) > 0) $breadcrumb->addLinkSet();
+    foreach ($referenced_entities as $referenced_entity) {
+      $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
+      $node = $this->extractNode($referenced_entity);
+
+      if ($node != NULL) {
+        $breadcrumb->addCacheableDependency($node);
+        $breadcrumb->addSublink($this->getViewLink($node));
+      } else {
+        $breadcrumb->addCacheableDependency($referenced_entity);
+        $breadcrumb->addSublink($referenced_entity->toLink());
+      }
     }
   }
 
   /**
-   * Follows chain of field_member_of links.
+   * Gets referenced fields (set from the config) of node.
    *
-   * We pass crumbs by reference to enable checking for looped chains.
+   * @param \Drupal\node\Entity\Node $node
+   *   Node to get referenced fields from.
+   * @return array
+   *   List of objects referenced by $node.
    */
-  protected function walkPartOf(EntityInterface $entity, &$crumbs) {
+  protected function getReferencedEntities(?Node $node) {
+    $referenced_entities = [];
+    if ($node == NULL) {
+      return $referenced_entities;
+    }
+    foreach ($this->config->get('referenceFields') as $reference_field) {
+      if ($node->hasField($reference_field) &&
+      !$node->get($reference_field)->isEmpty() &&
+      $node->get($reference_field)->entity instanceof EntityInterface) {
+        $entities = $node->get($reference_field)->referencedEntities();
+        $referenced_entities = array_merge($referenced_entities, $entities);
+      }
+    }
+    return $referenced_entities;
+  }
 
-    // Find the next in the chain, if there are any.
-    if ($entity->hasField("field_part_of") &&
-      count($entity->get("field_part_of")->referencedEntities()) >0 &&
-      $entity->get("field_part_of")->referencedEntities()[0] instanceof EntityInterface) {
+  protected function nodeHasReferenceFields(Node $node) {
+    foreach ($this->config->get('referenceFields') as $reference_field) {
+      if ($node->hasField($reference_field)) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
 
-      $first_page = $entity->get("field_part_of")->referencedEntities()[0];
-      // Add this item onto the pile.
-      $this->walkMembership($first_page, $crumbs);
-
-      // Add this item onto the pile.
-      array_unshift($crumbs, $entity);
+  /**
+   * Gets link from node if it has a special view.
+   *
+   * @param \Drupal\node\Entity\Node $node
+   *   Node to get link from.
+   * @return \Drupal\Core\Link
+   *   Link representing node.
+   */
+  protected function getViewLink(Node $node) {
+    $nid = $node->id();
+    if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Collection" ){
+      $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
+      $route_name = $url_object->getRouteName();
+      // if the parent is collection, replace the node link with collection view link
+      return Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]);
+    }
+    else if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Paged Content" ){
+      return Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]);
+    }
+    else {
+      return $node->toLink();
     }
   }
 
+  /**
+   * Extracts node from entity.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   Entity to get node from.
+   * @return \Drupal\node\Entity\Node
+   *   Node from entity.
+   */
+  protected function extractNode(EntityInterface $entity) {
+    $link = $entity->toLink()->toString()->getGeneratedLink();
+
+    // extract node from the link
+    preg_match_all('/<a[^>]+href=([\'"])(?<href>.+?)\1[^>]*>/i', $link, $result);
+    if (!empty($result)) {
+      # Found a link.
+      $node_url = $result['href'][0];
+
+      $node_matched = preg_match('/node\/(\d+)/', $node_url, $matches);
+      if ($node_matched === 0) {
+        // add to handle node id with alias (ark url)
+        $path = \Drupal::service('path_alias.manager')->getPathByAlias(urldecode($node_url));
+        $node_matched = preg_match('/node\/(\d+)/', $path, $matches);
+      }
+
+      if($node_matched) {
+        $nid = $matches[1];
+        $node = Node::load($nid);
+        return $node;
+      }
+    }
+    return NULL;
+  }
 }
