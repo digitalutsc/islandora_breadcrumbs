@@ -68,7 +68,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
-      if($this->nodeHasReferenceFields($node)){
+      if(!is_null($node) && $this->nodeHasReferenceFields($node)){
         global $isIslandora;
         $isIslandora = true;
       }
@@ -108,7 +108,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         if (intval($pe)) {
           // if it's node id
           $node = \Drupal\node\Entity\Node::load($pe);
-          if($this->nodeHasReferenceFields($node)){
+          if(!is_null($node) && $this->nodeHasReferenceFields($node)){
             $nid = $pe;
             // if islandora object
             $title = $node->getTitle();
