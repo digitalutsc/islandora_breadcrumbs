@@ -107,7 +107,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
         if (intval($pe)) {
           // if it's node id
-          $node = \Drupal\node\Entity\Node::load($pe);
+          $node = $this->getTranslatedNode(\Drupal\node\Entity\Node::load($pe));
           if(!is_null($node) && $this->nodeHasReferenceFields($node)){
             $nid = $pe;
             // if islandora object
@@ -245,6 +245,22 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
   }
 
   /**
+   * Gets node translated to current language. If no translation exists, returns untranslated node.
+   *
+   * @param \Drupal\node\Entity\Node $node
+   *   Node to be translated.
+   * @return \Drupal\node\Entity\Node
+   *   Translated node.
+   */
+  protected function getTranslatedNode(Node $node) {
+    $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+    if ($node->hasTranslation($langcode)) {
+      $node = $node->getTranslation($langcode);
+    }
+    return $node;
+  }
+
+  /**
    * Extracts node from entity.
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
@@ -271,7 +287,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       if($node_matched) {
         $nid = $matches[1];
         $node = Node::load($nid);
-        return $node;
+        return $this->getTranslatedNode($node);
       }
     }
     return NULL;
