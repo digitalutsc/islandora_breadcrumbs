@@ -110,7 +110,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
         if (intval($pe)) {
           // if it's node id
-          $node = \Drupal\node\Entity\Node::load($pe);
+          $node = $this->getTranslatedNode(\Drupal\node\Entity\Node::load($pe));
           if(!is_null($node) && $this->nodeHasReferenceFields($node)){
             $nid = $pe;
             // if islandora object
@@ -120,7 +120,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       }
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
       if ($parameters['view_id']  === "advanced_search") {
-        $breadcrumb->addLink(Link::createFromRoute("Search Results", '<none>'));
+        $breadcrumb->addLink(Link::createFromRoute($this->t('Search Results'), '<none>'));
       }else if ($parameters['view_id'] === "collections") {
         $breadcrumb->addLink(Link::createFromRoute($this->t("Collections"), '<none>'));
       }else {
@@ -250,6 +250,25 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
   }
 
   /**
+   * Gets node translated to current language. If no translation exists, returns untranslated node.
+   *
+   * @param \Drupal\node\Entity\Node $node
+   *   Node to be translated.
+   * @return \Drupal\node\Entity\Node
+   *   Translated node.
+   */
+  protected function getTranslatedNode(?Node $node) {
+    if (is_null($node)) {
+      return NULL;
+    }
+    $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+    if ($node->hasTranslation($langcode)) {
+      $node = $node->getTranslation($langcode);
+    }
+    return $node;
+  }
+
+  /**
    * Extracts node from entity.
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
@@ -276,7 +295,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       if($node_matched) {
         $nid = $matches[1];
         $node = Node::load($nid);
-        return $node;
+        return $this->getTranslatedNode($node);
       }
     }
     return NULL;
