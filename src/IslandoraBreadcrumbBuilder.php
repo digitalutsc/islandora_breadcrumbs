@@ -58,6 +58,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     // Using getRawParameters for consistency (always gives a
     // node ID string) because getParameters sometimes returns
     // a node ID string and sometimes returns a node object.
+    if (\Drupal::service('path.matcher')->isFrontPage()) {
+      return FALSE;
+    }
     $parameters = $attributes->getParameters()->all();
     if (isset($parameters['taxonomy_term'])) {
       return TRUE;
