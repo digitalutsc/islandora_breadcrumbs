@@ -252,7 +252,10 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * @return \Drupal\node\Entity\Node
    *   Translated node.
    */
-  protected function getTranslatedNode(Node $node) {
+  protected function getTranslatedNode(?Node $node) {
+    if (is_null($node)) {
+      return NULL;
+    }
     $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
     if ($node->hasTranslation($langcode)) {
       $node = $node->getTranslation($langcode);
