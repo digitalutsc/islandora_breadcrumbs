@@ -58,6 +58,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     // Using getRawParameters for consistency (always gives a
     // node ID string) because getParameters sometimes returns
     // a node ID string and sometimes returns a node object.
+    if (\Drupal::service('path.matcher')->isFrontPage()) {
+      return FALSE;
+    }
     $parameters = $attributes->getParameters()->all();
     if (isset($parameters['taxonomy_term'])) {
       return TRUE;
@@ -118,6 +121,8 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
       if ($parameters['view_id']  === "advanced_search") {
         $breadcrumb->addLink(Link::createFromRoute($this->t('Search Results'), '<none>'));
+      }else if ($parameters['view_id'] === "collections") {
+        $breadcrumb->addLink(Link::createFromRoute($this->t("Collections"), '<none>'));
       }else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
         $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
