@@ -121,6 +121,8 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
       if ($parameters['view_id']  === "advanced_search") {
         $breadcrumb->addLink(Link::createFromRoute("Search Results", '<none>'));
+      }else if ($parameters['view_id'] === "collections") {
+        $breadcrumb->addLink(Link::createFromRoute($this->t("Collections"), '<none>'));
       }else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
         $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
