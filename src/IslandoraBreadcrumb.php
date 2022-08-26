@@ -16,7 +16,9 @@ class IslandoraBreadcrumb extends Breadcrumb {
    * {@inheritdoc}
    */
   public function addLink(Link $link) {
-    $this->links[][] = $link;
+    if (!is_null($link->getText())) {
+      $this->links[][] = $link;
+    }
     return $this;
   }
 
