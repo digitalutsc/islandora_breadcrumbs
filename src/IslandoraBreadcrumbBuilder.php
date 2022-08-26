@@ -119,11 +119,12 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         }
       }
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
-      if ($parameters['view_id']  === "advanced_search") {
-        $breadcrumb->addLink(Link::createFromRoute($this->t('Search Results'), '<none>'));
-      }else if ($parameters['view_id'] === "collections") {
-        $breadcrumb->addLink(Link::createFromRoute($this->t("Collections"), '<none>'));
-      }else {
+
+      $view = \Drupal\views\Views::getView($parameters['view_id']);
+      $view_title = $view->getTitle();
+      if (is_null($node)){
+        $breadcrumb->addLink(Link::createFromRoute($view_title, '<none>'));
+      } else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
         $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
       }
