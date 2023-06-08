@@ -125,7 +125,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         $breadcrumb->addLink(Link::createFromRoute($this->t("Collections"), '<none>'));
       }else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
-        $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
+        $breadcrumb->addLink(Link::createFromRoute($title, $route_name, $parameters));
       }
     }else{
       global $isIslandora;
