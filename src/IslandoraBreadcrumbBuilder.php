@@ -254,7 +254,10 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     $nid = $node->id();
     if (Term::load($node->get('field_model')->target_id)->get('name')->value === "Collection") {
       $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
-      $route_name = $url_object->getRouteName();
+      if ($url_object == FALSE)
+        return $node->toLink();
+      else
+        $route_name = $url_object->getRouteName();
       /* If the parent is collection,
       replace the node link with collection view link. */
       return Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]);
