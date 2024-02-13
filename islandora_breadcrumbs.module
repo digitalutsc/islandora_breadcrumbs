@@ -5,6 +5,8 @@
  * Primary module hooks for Islandora Breadcrumbs module.
  */
 
+use Drupal\node\NodeInterface;
+
 /**
  * Implements hook_theme().
  */
@@ -28,14 +30,20 @@ function islandora_breadcrumbs_theme($existing, $type, $theme, $path) {
  *   - links: A list of \Drupal\Core\Link objects which should be rendered.
  */
 function islandora_breadcrumbs_preprocess_islandora_breadcrumb(array &$variables) {
-  $variables['breadcrumb'] = [];
-  /** @var \Drupal\Core\Link $link */
-  foreach ($variables['links'] as $key => $links) {
-    foreach ($links as $link) {
-      $variables['breadcrumb'][$key][] = [
-        'text' => $link->getText(),
-        'url' => $link->getUrl()->toString(),
-      ];
+  $node = \Drupal::routeMatch()->getParameter('node');
+  if ($node instanceof NodeInterface) {
+    $type = $node->getType();
+    if ($type == "islandora_object") {
+      $variables['breadcrumb'] = [];
+      /** @var \Drupal\Core\Link $link */
+      foreach ($variables['links'] as $key => $links) {
+        foreach ($links as $link) {
+          $variables['breadcrumb'][$key][] = [
+            'text' => $link->getText(),
+            'url' => $link->getUrl()->toString(),
+          ];
+        }
+      }
     }
   }
 }
