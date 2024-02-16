@@ -5,15 +5,12 @@ namespace Drupal\islandora_breadcrumbs;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityInterface;
-use Drupal\Core\Breadcrumb\Breadcrumb;
 use Drupal\Core\Breadcrumb\BreadcrumbBuilderInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
-use Drupal\Component\Utility\Unicode;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\node\Entity\Node;
-use Drupal\islandora_breadcrumbs\IslandoraBreadcrumb;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -35,8 +32,12 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    */
   protected $nodeStorage;
 
-  // check whether is type islandora object
-  var $isIslandora;
+  /**
+   * Check whether is type islandora object.
+   *
+   * @var bool
+   */
+  public $isIslandora;
 
   /**
    * Constructs a breadcrumb builder.
@@ -71,34 +72,38 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     $nid = $attributes->getRawParameters()->get('node');
     if (!empty($nid)) {
       $node = $this->nodeStorage->load($nid);
-      if(!is_null($node) && $this->nodeHasReferenceFields($node)){
-        global $isIslandora;
-        $isIslandora = true;
+      if (!is_null($node) && $this->nodeHasReferenceFields($node)) {
+        global $_islandora_breadcrumbs_isIslandora;
+        $_islandora_breadcrumbs_isIslandora = TRUE;
       }
       return (!empty($node));
     }
+    return FALSE;
   }
 
   /**
    * {@inheritdoc}
    */
   public function build(RouteMatchInterface $route_match) {
-    //initialize breadcrumb and create link to Home
+    // Initialize breadcrumb and create link to Home.
     $breadcrumb = new IslandoraBreadcrumb();
     $breadcrumb->addLink(Link::createFromRoute($this->t('Home'), '<front>'));
 
     $parameters = $route_match->getParameters()->all();
     if (isset($parameters['taxonomy_term'])) {
-      // breadcrumb for taxonomy term
+      // Breadcrumb for taxonomy term.
       $term = $parameters['taxonomy_term'];
       $breadcrumb->addLink(Link::createFromRoute($term->getName(), '<none>'));
 
       /*
       $bundle_machine_name =  $term->bundle();
-      $breadcrumb->addLink(Link::createFromRoute($bundle_machine_name, '<none>'));
-      */
+      $breadcrumb->addLink(
+      Link::createFromRoute($bundle_machine_name, '<none>')
+      );
+       */
 
-    }else if(isset($parameters['view_id'])){
+    }
+    elseif (isset($parameters['view_id'])) {
       $path = \Drupal::service('path.current')->getPath();
       $url_object = \Drupal::service('path.validator')->getUrlIfValid($path);
       $route_name = $url_object->getRouteName();
@@ -106,42 +111,43 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $path_elements = explode('/', $path);
       $nid = "";
       $node = NULL;
-      foreach($path_elements as $pe) {
+      foreach ($path_elements as $pe) {
 
         if (intval($pe)) {
-          // if it's node id
-          $node = $this->getTranslatedNode(\Drupal\node\Entity\Node::load($pe));
-          if(!is_null($node) && $this->nodeHasReferenceFields($node)){
+          // If it's node id.
+          $node = $this->getTranslatedNode(Node::load($pe));
+          if (!is_null($node) && $this->nodeHasReferenceFields($node)) {
             $nid = $pe;
-            // if islandora object
+            // If islandora object.
             $title = $node->getTitle();
           }
         }
       }
-      //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
 
+      //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
       $view = \Drupal\views\Views::getView($parameters['view_id']);
       $view_title = $view->getTitle();
       if (is_null($node)){
         $breadcrumb->addLink(Link::createFromRoute($view_title, '<none>'));
       } else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
-        $breadcrumb->addLink(Link::createFromRoute($title, $route_name, ['node' => $nid]));
+        $breadcrumb->addLink(Link::createFromRoute($title, $route_name, $parameters));
       }
-    }else{
-      global $isIslandora;
-      if($isIslandora){
-        // breadcrumb for islandora object
+    }
+    else {
+      global $_islandora_breadcrumbs_isIslandora;
+      if ($_islandora_breadcrumbs_isIslandora) {
+        // Breadcrumb for islandora object.
         $nid = $route_match->getRawParameters()->get('node');
         $node = $this->nodeStorage->load($nid);
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
       }
 
-      // add current page title to the breadcrumb.
+      // Add current page title to the breadcrumb.
       if ($this->config->get('includeSelf') && $breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
         $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
         if (!empty($title)) {
-          $breadcrumb->addLink(\Drupal\Core\Link::createFromRoute($title, '<none>'));
+          $breadcrumb->addLink(Link::createFromRoute($title, '<none>'));
         }
       }
     }
@@ -157,16 +163,16 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * @param \Drupal\node\Entity\Node $node
    *   Node to get breadcrumb of.
    */
-  protected function setReferenceBreadcrumbs(IslandoraBreadcrumb &$breadcrumb, ?Node $node) {
+  protected function setReferenceBreadcrumbs(IslandoraBreadcrumb &$breadcrumb, Node $node = NULL) {
     if ($node == NULL) {
       return;
     }
     $breadcrumb->addCacheableDependency($node);
 
-    // get entities from referenced fields
+    // Get entities from referenced fields.
     $referenced_entities = $this->getReferencedEntities($node);
 
-    // check referenced fields for members
+    // Check referenced fields for members.
     foreach ($referenced_entities as $referenced_entity) {
       $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
@@ -177,8 +183,10 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       }
     }
 
-    // add members to breadcrumb
-    if (count($referenced_entities) > 0) $breadcrumb->addLinkSet();
+    // Add members to breadcrumb.
+    if (count($referenced_entities) > 0) {
+      $breadcrumb->addLinkSet();
+    }
     foreach ($referenced_entities as $referenced_entity) {
       $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
@@ -186,7 +194,8 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       if ($node != NULL) {
         $breadcrumb->addCacheableDependency($node);
         $breadcrumb->addSublink($this->getViewLink($node));
-      } else {
+      }
+      else {
         $breadcrumb->addCacheableDependency($referenced_entity);
         $breadcrumb->addSublink($referenced_entity->toLink());
       }
@@ -198,18 +207,19 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *
    * @param \Drupal\node\Entity\Node $node
    *   Node to get referenced fields from.
+   *
    * @return array
    *   List of objects referenced by $node.
    */
-  protected function getReferencedEntities(?Node $node) {
+  protected function getReferencedEntities(Node $node = NULL) {
     $referenced_entities = [];
     if ($node == NULL) {
       return $referenced_entities;
     }
     foreach ($this->config->get('referenceFields') as $reference_field) {
       if ($node->hasField($reference_field) &&
-      !$node->get($reference_field)->isEmpty() &&
-      $node->get($reference_field)->entity instanceof EntityInterface) {
+        !$node->get($reference_field)->isEmpty() &&
+        $node->get($reference_field)->entity instanceof EntityInterface) {
         $entities = $node->get($reference_field)->referencedEntities();
         $referenced_entities = array_merge($referenced_entities, $entities);
       }
@@ -217,6 +227,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     return $referenced_entities;
   }
 
+  /**
+   * Determine node has entity reference fields.
+   */
   protected function nodeHasReferenceFields(Node $node) {
     foreach ($this->config->get('referenceFields') as $reference_field) {
       if ($node->hasField($reference_field)) {
@@ -231,18 +244,13 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *
    * @param \Drupal\node\Entity\Node $node
    *   Node to get link from.
+   *
    * @return \Drupal\Core\Link
    *   Link representing node.
    */
   protected function getViewLink(Node $node) {
     $nid = $node->id();
-    if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Collection" ){
-      $url_object = \Drupal::service('path.validator')->getUrlIfValid("/collection/%node");
-      $route_name = $url_object->getRouteName();
-      // if the parent is collection, replace the node link with collection view link
-      return Link::createFromRoute($node->getTitle(), $route_name, ['node' => $nid]);
-    }
-    else if (Term::load($node->get('field_model')->target_id)->get('name')->value ==="Paged Content" ){
+    if (Term::load($node->get('field_model')->target_id)->get('name')->value === "Paged Content") {
       return Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]);
     }
     else {
@@ -251,14 +259,15 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
   }
 
   /**
-   * Gets node translated to current language. If no translation exists, returns untranslated node.
+   * Gets node translated to current language. If no, returns untranslated node.
    *
    * @param \Drupal\node\Entity\Node $node
    *   Node to be translated.
+   *
    * @return \Drupal\node\Entity\Node
    *   Translated node.
    */
-  protected function getTranslatedNode(?Node $node) {
+  protected function getTranslatedNode(Node $node = NULL) {
     if (is_null($node)) {
       return NULL;
     }
@@ -274,26 +283,27 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *   Entity to get node from.
+   *
    * @return \Drupal\node\Entity\Node
    *   Node from entity.
    */
   protected function extractNode(EntityInterface $entity) {
     $link = $entity->toLink()->toString()->getGeneratedLink();
 
-    // extract node from the link
+    // Extract node from the link.
     preg_match_all('/<a[^>]+href=([\'"])(?<href>.+?)\1[^>]*>/i', $link, $result);
     if (!empty($result)) {
-      # Found a link.
+      // Found a link.
       $node_url = $result['href'][0];
 
       $node_matched = preg_match('/node\/(\d+)/', $node_url, $matches);
       if ($node_matched === 0) {
-        // add to handle node id with alias (ark url)
+        // Add to handle node id with alias (ark url)
         $path = \Drupal::service('path_alias.manager')->getPathByAlias(urldecode($node_url));
         $node_matched = preg_match('/node\/(\d+)/', $path, $matches);
       }
 
-      if($node_matched) {
+      if ($node_matched) {
         $nid = $matches[1];
         $node = Node::load($nid);
         return $this->getTranslatedNode($node);
@@ -301,4 +311,5 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     }
     return NULL;
   }
+
 }

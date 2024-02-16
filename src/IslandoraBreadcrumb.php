@@ -5,8 +5,14 @@ namespace Drupal\islandora_breadcrumbs;
 use Drupal\Core\Breadcrumb\Breadcrumb;
 use Drupal\Core\Link;
 
+/**
+ * Class for Islandora Breadcrumb.
+ */
 class IslandoraBreadcrumb extends Breadcrumb {
 
+  /**
+   * Add Sub-link.
+   */
   public function addSublink(Link $link) {
     $this->links[array_key_last($this->links)][] = $link;
     return $this;
@@ -22,6 +28,9 @@ class IslandoraBreadcrumb extends Breadcrumb {
     return $this;
   }
 
+  /**
+   * Add Link Set.
+   */
   public function addLinkSet() {
     $this->links[] = [];
     return $this;
