@@ -126,6 +126,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
       //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
       $view = \Drupal\views\Views::getView($parameters['view_id']);
+      $view->setDisplay($parameters['display_id']);
       $view_title = $view->getTitle();
       if (is_null($node)){
         $breadcrumb->addLink(Link::createFromRoute($view_title, '<none>'));
@@ -188,6 +189,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $breadcrumb->addLinkSet();
     }
     foreach ($referenced_entities as $referenced_entity) {
+      $referenced_entity = \Drupal::service('entity.repository')->getTranslationFromContext($referenced_entity);
       $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
 
