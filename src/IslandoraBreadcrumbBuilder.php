@@ -1,5 +1,8 @@
 <?php
 
+// phpcs:disable DrupalPractice.Objects.GlobalDrupal
+// phpcs:disable DrupalPractice.Objects.GlobalClass
+
 namespace Drupal\islandora_breadcrumbs;
 
 use Drupal\views\Views;
