@@ -2,5 +2,6 @@
   "name": "islandora_lite/islandora_breadcrumbs",
   "type": "drupal-module",
   "description": "Breadcrumbs for Islandora objects",
-  "keywords": ["Drupal"]
+  "keywords": ["Drupal"],
+  "require": {}
 }
