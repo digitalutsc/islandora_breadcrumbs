@@ -1,7 +1,11 @@
 <?php
 
+// phpcs:disable DrupalPractice.Objects.GlobalDrupal
+// phpcs:disable DrupalPractice.Objects.GlobalClass
+
 namespace Drupal\islandora_breadcrumbs;
 
+use Drupal\views\Views;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityInterface;
@@ -124,13 +128,15 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         }
       }
 
-      //$title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
-      $view = \Drupal\views\Views::getView($parameters['view_id']);
+      // phpcs:ignore -- Line exceeds 80 characters; contains 86 characters
+      // $title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
+      $view = Views::getView($parameters['view_id']);
       $view->setDisplay($parameters['display_id']);
       $view_title = $view->getTitle();
-      if (is_null($node)){
+      if (is_null($node)) {
         $breadcrumb->addLink(Link::createFromRoute($view_title, '<none>'));
-      } else {
+      }
+      else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
         $breadcrumb->addLink(Link::createFromRoute($title, 'entity.node.canonical', ['node' => $nid]));    //updated for breadcrumb issue  
         }
@@ -164,7 +170,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * @param \Drupal\node\Entity\Node $node
    *   Node to get breadcrumb of.
    */
-  protected function setReferenceBreadcrumbs(IslandoraBreadcrumb &$breadcrumb, Node $node = NULL) {
+  protected function setReferenceBreadcrumbs(IslandoraBreadcrumb &$breadcrumb, ?Node $node = NULL) {
     if ($node == NULL) {
       return;
     }
@@ -175,6 +181,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
     // Check referenced fields for members.
     foreach ($referenced_entities as $referenced_entity) {
+      // phpcs:ignore -- Unused variable $link.
       $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
       $refs = $this->getReferencedEntities($node);
@@ -190,6 +197,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     }
     foreach ($referenced_entities as $referenced_entity) {
       $referenced_entity = \Drupal::service('entity.repository')->getTranslationFromContext($referenced_entity);
+      // phpcs:ignore -- Unused variable $link.
       $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
 
@@ -213,7 +221,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * @return array
    *   List of objects referenced by $node.
    */
-  protected function getReferencedEntities(Node $node = NULL) {
+  protected function getReferencedEntities(?Node $node = NULL) {
     $referenced_entities = [];
     if ($node == NULL) {
       return $referenced_entities;
@@ -251,6 +259,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *   Link representing node.
    */
   protected function getViewLink(Node $node) {
+    // phpcs:ignore -- Unused variable $nid.
     $nid = $node->id();
     if (Term::load($node->get('field_model')->target_id)->get('name')->value === "Paged Content") {
       return Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]);
@@ -269,7 +278,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    * @return \Drupal\node\Entity\Node
    *   Translated node.
    */
-  protected function getTranslatedNode(Node $node = NULL) {
+  protected function getTranslatedNode(?Node $node = NULL) {
     if (is_null($node)) {
       return NULL;
     }
