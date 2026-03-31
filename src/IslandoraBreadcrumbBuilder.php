@@ -110,6 +110,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     elseif (isset($parameters['view_id'])) {
       $path = \Drupal::service('path.current')->getPath();
       $url_object = \Drupal::service('path.validator')->getUrlIfValid($path);
+      // phpcs:ignore -- Unused variable $route_name.
       $route_name = $url_object->getRouteName();
       $title = '';
       $path_elements = explode('/', $path);
@@ -138,8 +139,9 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       }
       else {
         $this->setReferenceBreadcrumbs($breadcrumb, $node);
-        $breadcrumb->addLink(Link::createFromRoute($title, 'entity.node.canonical', ['node' => $nid]));    //updated for breadcrumb issue  
-        }
+        // Updated for breadcrumb issue.
+        $breadcrumb->addLink(Link::createFromRoute($title, 'entity.node.canonical', ['node' => $nid]));
+      }
     }
     else {
       global $_islandora_breadcrumbs_isIslandora;
