@@ -1,8 +1,5 @@
 <?php
 
-// phpcs:disable DrupalPractice.Objects.GlobalDrupal
-// phpcs:disable DrupalPractice.Objects.GlobalClass
-
 namespace Drupal\islandora_breadcrumbs;
 
 use Drupal\views\Views;
@@ -13,8 +10,15 @@ use Drupal\Core\Breadcrumb\BreadcrumbBuilderInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
-use Drupal\taxonomy\Entity\Term;
 use Drupal\node\Entity\Node;
+use Drupal\Core\Path\PathMatcherInterface;
+use Drupal\Core\Path\CurrentPathStack;
+use Drupal\Core\Routing\AdminContext;
+use Drupal\Core\Controller\TitleResolverInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Drupal\Core\Entity\EntityRepositoryInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
+use Drupal\path_alias\AliasManagerInterface;
 
 /**
  * Provides breadcrumbs for nodes using a configured entity reference field.
@@ -37,11 +41,74 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
   protected $nodeStorage;
 
   /**
+   * Storage to load taxonomy terms.
+   *
+   * @var \Drupal\Core\Entity\EntityStorageInterface
+   */
+  protected $termStorage;
+
+  /**
    * Check whether is type islandora object.
    *
    * @var bool
    */
   public $isIslandora;
+
+  /**
+   * The path matcher.
+   *
+   * @var \Drupal\Core\Path\PathMatcherInterface
+   */
+  protected $pathMatcher;
+
+  /**
+   * The current path service.
+   *
+   * @var \Drupal\Core\Path\CurrentPathStack
+   */
+  protected $currentPath;
+
+  /**
+   * The router admin context.
+   *
+   * @var \Drupal\Core\Routing\AdminContext
+   */
+  protected $adminContext;
+
+  /**
+   * The title resolver.
+   *
+   * @var \Drupal\Core\Controller\TitleResolverInterface
+   */
+  protected $titleResolver;
+
+  /**
+   * The request stack.
+   *
+   * @var \Symfony\Component\HttpFoundation\RequestStack
+   */
+  protected $requestStack;
+
+  /**
+   * The entity repository.
+   *
+   * @var \Drupal\Core\Entity\EntityRepositoryInterface
+   */
+  protected $entityRepository;
+
+  /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface
+   */
+  protected $languageManager;
+
+  /**
+   * The path alias manager.
+   *
+   * @var \Drupal\path_alias\AliasManagerInterface
+   */
+  protected $pathAliasManager;
 
   /**
    * Constructs a breadcrumb builder.
@@ -50,10 +117,46 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *   Storage to load nodes.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The configuration factory.
+   * @param \Drupal\Core\Path\PathMatcherInterface $path_matcher
+   *   The path matcher.
+   * @param \Drupal\Core\Path\CurrentPathStack $current_path
+   *   The current path service.
+   * @param \Drupal\Core\Routing\AdminContext $admin_context
+   *   The router admin context.
+   * @param \Drupal\Core\Controller\TitleResolverInterface $title_resolver
+   *   The title resolver.
+   * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
+   *   The request stack.
+   * @param \Drupal\Core\Entity\EntityRepositoryInterface $entity_repository
+   *   The entity repository.
+   * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
+   *   The language manager.
+   * @param \Drupal\path_alias\AliasManagerInterface $path_alias_manager
+   *   The path alias manager.
    */
-  public function __construct(EntityTypeManagerInterface $entity_manager, ConfigFactoryInterface $config_factory) {
+  public function __construct(
+    EntityTypeManagerInterface $entity_manager,
+    ConfigFactoryInterface $config_factory,
+    PathMatcherInterface $path_matcher,
+    CurrentPathStack $current_path,
+    AdminContext $admin_context,
+    TitleResolverInterface $title_resolver,
+    RequestStack $request_stack,
+    EntityRepositoryInterface $entity_repository,
+    LanguageManagerInterface $language_manager,
+    AliasManagerInterface $path_alias_manager,
+  ) {
     $this->nodeStorage = $entity_manager->getStorage('node');
+    $this->termStorage = $entity_manager->getStorage('taxonomy_term');
     $this->config = $config_factory->get('islandora_breadcrumbs.breadcrumbs');
+    $this->pathMatcher = $path_matcher;
+    $this->currentPath = $current_path;
+    $this->adminContext = $admin_context;
+    $this->titleResolver = $title_resolver;
+    $this->requestStack = $request_stack;
+    $this->entityRepository = $entity_repository;
+    $this->languageManager = $language_manager;
+    $this->pathAliasManager = $path_alias_manager;
   }
 
   /**
@@ -63,7 +166,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     // Using getRawParameters for consistency (always gives a
     // node ID string) because getParameters sometimes returns
     // a node ID string and sometimes returns a node object.
-    if (\Drupal::service('path.matcher')->isFrontPage()) {
+    if ($this->pathMatcher->isFrontPage()) {
       return FALSE;
     }
     $parameters = $attributes->getParameters()->all();
@@ -108,10 +211,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
     }
     elseif (isset($parameters['view_id'])) {
-      $path = \Drupal::service('path.current')->getPath();
-      $url_object = \Drupal::service('path.validator')->getUrlIfValid($path);
-      // phpcs:ignore -- Unused variable $route_name.
-      $route_name = $url_object->getRouteName();
+      $path = $this->currentPath->getPath();
       $title = '';
       $path_elements = explode('/', $path);
       $nid = "";
@@ -120,7 +220,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
         if (intval($pe)) {
           // If it's node id.
-          $node = $this->getTranslatedNode(Node::load($pe));
+          $node = $this->getTranslatedNode($this->nodeStorage->load($pe));
           if (!is_null($node) && $this->nodeHasReferenceFields($node)) {
             $nid = $pe;
             // If islandora object.
@@ -129,8 +229,8 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
         }
       }
 
-      // phpcs:ignore -- Line exceeds 80 characters; contains 86 characters
-      // $title = str_replace(['-', '_'], ' ', Unicode::ucwords(end($path_elements)));
+      // $title = str_replace(['-', '_'], ' ',
+      // Unicode::ucwords(end($path_elements)));
       $view = Views::getView($parameters['view_id']);
       $view->setDisplay($parameters['display_id']);
       $view_title = $view->getTitle();
@@ -153,8 +253,8 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       }
 
       // Add current page title to the breadcrumb.
-      if ($this->config->get('includeSelf') && $breadcrumb && !\Drupal::service('router.admin_context')->isAdminRoute() && !\Drupal::service('path.matcher')->isFrontPage()) {
-        $title = \Drupal::service('title_resolver')->getTitle(\Drupal::request(), $route_match->getRouteObject());
+      if ($this->config->get('includeSelf') && $breadcrumb && !$this->adminContext->isAdminRoute() && !$this->pathMatcher->isFrontPage()) {
+        $title = $this->titleResolver->getTitle($this->requestStack->getCurrentRequest(), $route_match->getRouteObject());
         if (!empty($title)) {
           $breadcrumb->addLink(Link::createFromRoute($title, '<none>'));
         }
@@ -183,8 +283,6 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
 
     // Check referenced fields for members.
     foreach ($referenced_entities as $referenced_entity) {
-      // phpcs:ignore -- Unused variable $link.
-      $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
       $node = $this->extractNode($referenced_entity);
       $refs = $this->getReferencedEntities($node);
       if (count($refs) > 0) {
@@ -198,9 +296,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $breadcrumb->addLinkSet();
     }
     foreach ($referenced_entities as $referenced_entity) {
-      $referenced_entity = \Drupal::service('entity.repository')->getTranslationFromContext($referenced_entity);
-      // phpcs:ignore -- Unused variable $link.
-      $link = $referenced_entity->toLink()->toString()->getGeneratedLink();
+      $referenced_entity = $this->entityRepository->getTranslationFromContext($referenced_entity);
       $node = $this->extractNode($referenced_entity);
 
       if ($node != NULL) {
@@ -261,9 +357,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
    *   Link representing node.
    */
   protected function getViewLink(Node $node) {
-    // phpcs:ignore -- Unused variable $nid.
-    $nid = $node->id();
-    if (Term::load($node->get('field_model')->target_id)->get('name')->value === "Paged Content") {
+    if ($this->termStorage->load($node->get('field_model')->target_id)->get('name')->value === "Paged Content") {
       return Link::createFromRoute($node->getTitle(), "entity.node.canonical", ['node' => $node->id()]);
     }
     else {
@@ -284,7 +378,7 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
     if (is_null($node)) {
       return NULL;
     }
-    $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+    $langcode = $this->languageManager->getCurrentLanguage()->getId();
     if ($node->hasTranslation($langcode)) {
       $node = $node->getTranslation($langcode);
     }
@@ -312,13 +406,13 @@ class IslandoraBreadcrumbBuilder implements BreadcrumbBuilderInterface {
       $node_matched = preg_match('/node\/(\d+)/', $node_url, $matches);
       if ($node_matched === 0) {
         // Add to handle node id with alias (ark url)
-        $path = \Drupal::service('path_alias.manager')->getPathByAlias(urldecode($node_url));
+        $path = $this->pathAliasManager->getPathByAlias(urldecode($node_url));
         $node_matched = preg_match('/node\/(\d+)/', $path, $matches);
       }
 
       if ($node_matched) {
         $nid = $matches[1];
-        $node = Node::load($nid);
+        $node = $this->nodeStorage->load($nid);
         return $this->getTranslatedNode($node);
       }
     }
