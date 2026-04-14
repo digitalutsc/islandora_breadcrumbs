@@ -1,6 +1,6 @@
 services:
   islandora_breadcrumbs.breadcrumb:
     class: Drupal\islandora_breadcrumbs\IslandoraBreadcrumbBuilder
-    arguments: ["@entity_type.manager", "@config.factory"]
+    arguments: ["@entity_type.manager", "@config.factory", "@path.matcher", "@path.current", "@router.admin_context", "@title_resolver", "@request_stack", "@entity.repository", "@language_manager", "@path_alias.manager"]
     tags:
       - { name: breadcrumb_builder, priority: 10001 }
